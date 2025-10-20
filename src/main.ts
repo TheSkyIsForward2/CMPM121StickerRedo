@@ -13,17 +13,15 @@ document.body.innerHTML = `
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const clearButton = document.getElementById("clearbutton")!;
-//const undoButton = document.getElementById("undoButton")!;
-//const redoButton = document.getElementById("redoButton")!;
+const undoButton = document.getElementById("undoButton")!;
+const redoButton = document.getElementById("redoButton")!;
 
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Failed to get canvas context");
 
-// ✅ Define types
 type Point = { x: number; y: number };
 type Line = Point[];
 
-// ✅ Define arrays with proper types
 const lines: Line[] = [];
 const redoLines: Line[] = [];
 
@@ -79,4 +77,18 @@ function redraw() {
 clearButton.addEventListener("click", () => {
   lines.splice(0, lines.length);
   redraw();
+});
+
+undoButton.addEventListener("click", () => {
+  if (lines.length > 0) {
+    redoLines.push(lines.pop()!);
+    redraw();
+  }
+});
+
+redoButton.addEventListener("click", () => {
+  if (redoLines.length > 0) {
+    lines.push(redoLines.pop()!);
+    redraw();
+  }
 });

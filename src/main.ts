@@ -54,7 +54,7 @@ canvas.addEventListener("mousemove", (e) => {
   redraw();
 });
 
-canvas.addEventListener("mouseup", (e) => {
+canvas.addEventListener("mouseup", () => {
   cursor.active = false;
   currentLine = null;
 

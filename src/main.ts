@@ -5,17 +5,9 @@ document.title = "Sticker Sketchpad";
 document.body.innerHTML = `
 
   <h1>Sticker Sketchpad</h1>
-   <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+    <div class="toolbar" style="text-align:center; margin-bottom:10px;"></div>
     <canvas id="canvas" class="canvas" width="256" height="256"></canvas> 
-    <div>
-      <button id="thinButton" class="toolbutton selectedTool">Thin</button>
-      <button id="thickButton" class="toolbutton">Thick</button>
-    </div>
-    <div>
-      <button id="smileButton" class="toolbutton">😄</button>
-      <button id="buildingButton" class="toolbutton">🏢</button>
-      <button id="planeButton" class="toolbutton">✈️</button>
-    </div>
     <div>
       <button id="clearButton" class="clearbutton">Clear</button>
       <button id="undoButton" class="clearbutton">Undo</button>
@@ -24,25 +16,103 @@ document.body.innerHTML = `
   </div>
 `;
 
+const toolbar = document.querySelector(".toolbar")! as HTMLDivElement;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d")!;
 if (!ctx) throw new Error("Failed to get canvas context");
 
-const thinButton = document.getElementById("thinButton")!;
-const thickButton = document.getElementById("thickButton")!;
-const smileButton = document.getElementById("smileButton")!;
-const buildingButton = document.getElementById("buildingButton")!;
-const planeButton = document.getElementById("planeButton")!;
-const clearButton = document.getElementById("clearButton")!;
-const undoButton = document.getElementById("undoButton")!;
-const redoButton = document.getElementById("redoButton")!;
-
+//----------------------------------------------
+// Data-driven tool definitions
+//----------------------------------------------
 type ToolType = "thin" | "thick" | "sticker";
-type StickerType = "😄" | "🏢" | "✈️";
+type StickerData = { label: string; emoji: string };
+
+const stickers: StickerData[] = [
+  { label: "Smile", emoji: "😊" },
+  { label: "Building", emoji: "🏢" },
+  { label: "Plane", emoji: "✈️" },
+];
 
 let currentTool: ToolType = "thin";
-let currentThickness = 2;
-let currentSticker: StickerType | null = null;
+let currentSticker: string | null = null;
+
+//----------------------------------------------
+// Helper: create a tool button
+//----------------------------------------------
+function createButton(
+  label: string,
+  onClick: () => void,
+  cssClass = "toolButton",
+) {
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  btn.className = cssClass;
+  btn.addEventListener("click", onClick);
+  toolbar.appendChild(btn);
+  return btn;
+}
+
+//----------------------------------------------
+// Create tool buttons
+//----------------------------------------------
+const thinButton = createButton("Thin", () => selectTool("thin"));
+const thickButton = createButton("Thick", () => selectTool("thick"));
+
+// Sticker buttons (created dynamically)
+function refreshStickerButtons() {
+  // Remove existing sticker buttons
+  const oldStickerButtons = toolbar.querySelectorAll(".stickerButton");
+  oldStickerButtons.forEach((b) => b.remove());
+
+  for (const sticker of stickers) {
+    const _btn = createButton(
+      sticker.emoji,
+      () => selectSticker(sticker.emoji),
+      "stickerButton",
+    );
+  }
+
+  // Add "Custom Sticker" button
+  createButton("Add Custom", addCustomSticker, "stickerButton");
+}
+refreshStickerButtons();
+
+function addCustomSticker() {
+  const newEmoji = prompt("Enter a new sticker (e.g. emoji character):", "🌟");
+  if (newEmoji && newEmoji.trim() !== "") {
+    stickers.push({ label: "Custom", emoji: newEmoji.trim() });
+    refreshStickerButtons();
+  }
+}
+
+//----------------------------------------------
+// Tool selection logic
+//----------------------------------------------
+function selectTool(tool: ToolType) {
+  currentTool = tool;
+  currentSticker = null;
+  updateSelectedButton();
+}
+
+function selectSticker(emoji: string) {
+  currentTool = "sticker";
+  currentSticker = emoji;
+  updateSelectedButton();
+}
+
+function updateSelectedButton() {
+  const allButtons = toolbar.querySelectorAll("button");
+  allButtons.forEach((b) => b.classList.remove("selectedTool"));
+
+  if (currentTool === "thin") thinButton.classList.add("selectedTool");
+  else if (currentTool === "thick") thickButton.classList.add("selectedTool");
+  else {
+    const stickerButtons = toolbar.querySelectorAll(".stickerButton");
+    stickerButtons.forEach((b) => {
+      if (b.textContent === currentSticker) b.classList.add("selectedTool");
+    });
+  }
+}
 
 interface Command {
   display(ctx: CanvasRenderingContext2D): void;
@@ -54,8 +124,7 @@ class MarkerLine implements Command {
   points: { x: number; y: number }[] = [];
   thickness: number;
 
-  constructor(startX: number, startY: number, thickness: number) {
-    this.points.push({ x: startX, y: startY });
+  constructor(thickness: number) {
     this.thickness = thickness;
   }
 
@@ -80,9 +149,9 @@ class MarkerLine implements Command {
 class Sticker implements Command {
   x: number;
   y: number;
-  emoji: StickerType;
+  emoji: string;
 
-  constructor(x: number, y: number, emoji: StickerType) {
+  constructor(x: number, y: number, emoji: string) {
     this.x = x;
     this.y = y;
     this.emoji = emoji;
@@ -96,202 +165,109 @@ class Sticker implements Command {
 
   display(ctx: CanvasRenderingContext2D) {
     ctx.font = "24px serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(this.emoji, this.x, this.y);
+    ctx.fillText(this.emoji, this.x - 12, this.y + 12);
   }
 }
 
-// class for mouse hover
 class ToolPreview implements Command {
   x: number;
   y: number;
-  tool: ToolType;
-  thickness: number;
-  emoji?: StickerType | null;
-
-  constructor(
-    x: number,
-    y: number,
-    tool: ToolType,
-    thickness: number,
-    emoji?: StickerType | null,
-  ) {
+  constructor(x: number, y: number) {
     this.x = x;
     this.y = y;
-    this.tool = tool;
-    this.thickness = thickness;
-    this.emoji = emoji ?? null;
   }
-
-  update(
-    x: number,
-    y: number,
-    tool: ToolType,
-    thickness: number,
-    emoji?: StickerType | null,
-  ) {
-    this.x = x;
-    this.y = y;
-    this.tool = tool;
-    this.thickness = thickness;
-    this.emoji = emoji ?? null;
-  }
-
   display(ctx: CanvasRenderingContext2D) {
-    ctx.save();
-    if (this.tool === "sticker" && this.emoji) {
+    if (currentTool === "sticker" && currentSticker) {
       ctx.font = "24px serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.globalAlpha = 0.5;
-      ctx.fillText(this.emoji, this.x, this.y);
+      ctx.fillText(currentSticker, this.x, this.y);
     } else {
       ctx.beginPath();
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(0,0,0,0.5)";
-      ctx.arc(this.x, this.y, this.thickness / 2, 0, Math.PI * 2);
+      const radius = currentTool === "thin" ? 2 : 4;
+      ctx.arc(this.x, this.y, radius * 2, 0, Math.PI * 2);
+      ctx.strokeStyle = "gray";
       ctx.stroke();
     }
-    ctx.restore();
   }
 }
 
-// refactored commands
-const lines: Command[] = [];
-const redoLines: Command[] = [];
-let currentCommand: Command | null = null;
-let toolPreview: ToolPreview | null = null;
-let mouseDown = false;
+//----------------------------------------------
+// Undo/redo logic and interaction
+//----------------------------------------------
+const lines: (MarkerLine | Sticker)[] = [];
+const redoStack: (MarkerLine | Sticker)[] = [];
+let currentCommand: MarkerLine | Sticker | null = null;
+let preview: ToolPreview | null = null;
 
-// when mouse pressed down, start draw, handle tool/stickers
 canvas.addEventListener("mousedown", (e) => {
-  mouseDown = true;
-  const point = { x: e.offsetX, y: e.offsetY };
+  const x = e.offsetX;
+  const y = e.offsetY;
 
-  if (currentTool === "thin" || currentTool === "thick") {
-    currentCommand = new MarkerLine(point.x, point.y, currentThickness);
-  } else if (currentTool === "sticker" && currentSticker) {
-    currentCommand = new Sticker(point.x, point.y, currentSticker);
+  // Hide preview while drawing
+  preview = null;
+
+  if (currentTool === "sticker" && currentSticker) {
+    currentCommand = new Sticker(x, y, currentSticker);
+  } else {
+    const thickness = currentTool === "thin" ? 2 : 8;
+    currentCommand = new MarkerLine(thickness);
+    currentCommand.drag(x, y);
   }
 
-  if (currentCommand) {
-    lines.push(currentCommand);
-    redoLines.length = 0;
-  }
+  lines.push(currentCommand);
+  redoStack.length = 0;
   redraw();
 });
 
-// handle mouse movement while down, draw lines, create stickers
 canvas.addEventListener("mousemove", (e) => {
-  const { offsetX, offsetY } = e;
-  const point = { x: offsetX, y: offsetY };
+  const x = e.offsetX;
+  const y = e.offsetY;
 
-  // Fire tool-moved event (preview)
-  if (!toolPreview) {
-    toolPreview = new ToolPreview(
-      offsetX,
-      offsetY,
-      currentTool,
-      currentThickness,
-      currentSticker,
-    );
-  } else {
-    toolPreview.update(
-      offsetX,
-      offsetY,
-      currentTool,
-      currentThickness,
-      currentSticker,
-    );
+  if (currentCommand && currentTool !== "sticker") {
+    currentCommand.drag(x, y);
+  } else if (!currentCommand) {
+    // Only show preview when not drawing
+    preview = new ToolPreview(x, y);
   }
-
-  if (mouseDown && currentCommand && currentCommand.drag) {
-    currentCommand.drag(point.x, point.y);
-  }
-
   redraw();
 });
 
 canvas.addEventListener("mouseup", () => {
-  mouseDown = false;
   currentCommand = null;
   redraw();
 });
 
+// Hide preview when leaving canvas
 canvas.addEventListener("mouseleave", () => {
-  toolPreview = null;
+  preview = null;
   redraw();
 });
 
-canvas.addEventListener("mouseenter", (e) => {
-  toolPreview = new ToolPreview(
-    e.offsetX,
-    e.offsetY,
-    currentTool,
-    currentThickness,
-    currentSticker,
-  );
-  redraw();
-});
-
-// Rendering
+//----------------------------------------------
+// Redraw function
+//----------------------------------------------
 function redraw() {
-  ctx!.clearRect(0, 0, canvas.width, canvas.height);
-  for (const cmd of lines) cmd.display(ctx!);
-  if (!mouseDown && toolPreview) toolPreview.display(ctx!);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const cmd of lines) cmd.display(ctx);
+  if (preview) preview.display(ctx);
 }
 
-// tool selection functions for marker and sticker
-function selectMarkerTool(thickness: number, button: HTMLElement) {
-  currentTool = thickness === 2 ? "thin" : "thick";
-  currentThickness = thickness;
-  currentSticker = null;
-  updateButtonStates(button);
-  redraw();
-}
-
-function selectStickerTool(sticker: StickerType, button: HTMLElement) {
-  currentTool = "sticker";
-  currentSticker = sticker;
-  updateButtonStates(button);
-  redraw();
-}
-
-function updateButtonStates(activeButton: HTMLElement) {
-  const buttons = document.querySelectorAll(".toolbutton");
-  buttons.forEach((b) => b.classList.remove("selectedTool"));
-  activeButton.classList.add("selectedTool");
-}
-
-thinButton.addEventListener("click", () => selectMarkerTool(2, thinButton));
-thickButton.addEventListener("click", () => selectMarkerTool(8, thickButton));
-
-smileButton.addEventListener(
-  "click",
-  () => selectStickerTool("😄", smileButton),
-);
-buildingButton.addEventListener(
-  "click",
-  () => selectStickerTool("🏢", buildingButton),
-);
-planeButton.addEventListener(
-  "click",
-  () => selectStickerTool("✈️", planeButton),
-);
-
-clearButton.addEventListener("click", () => {
+//----------------------------------------------
+// Undo/redo/clear buttons
+//----------------------------------------------
+(document.getElementById("clearButton") as HTMLButtonElement).onclick = () => {
   lines.length = 0;
-  redoLines.length = 0;
+  redoStack.length = 0;
   redraw();
-});
+};
 
-undoButton.addEventListener("click", () => {
-  if (lines.length > 0) redoLines.push(lines.pop()!);
+(document.getElementById("undoButton") as HTMLButtonElement).onclick = () => {
+  if (lines.length > 0) redoStack.push(lines.pop()!);
   redraw();
-});
+};
 
-redoButton.addEventListener("click", () => {
-  if (redoLines.length > 0) lines.push(redoLines.pop()!);
+(document.getElementById("redoButton") as HTMLButtonElement).onclick = () => {
+  if (redoStack.length > 0) lines.push(redoStack.pop()!);
   redraw();
-});
+};

@@ -13,6 +13,7 @@ document.body.innerHTML = `
       <button id="undoButton" class="clearbutton">Undo</button>
       <button id="redoButton" class="clearbutton">Redo</button>
     </div>
+    <button id="exportButton" class="clearbutton">Export PNG</button>
   </div>
 `;
 
@@ -196,6 +197,7 @@ class ToolPreview implements Command {
 // Undo/redo logic and interaction
 //----------------------------------------------
 const lines: (MarkerLine | Sticker)[] = [];
+const exportLines: (MarkerLine | Sticker)[] = [];
 const redoStack: (MarkerLine | Sticker)[] = [];
 let currentCommand: MarkerLine | Sticker | null = null;
 let preview: ToolPreview | null = null;
@@ -216,6 +218,7 @@ canvas.addEventListener("mousedown", (e) => {
   }
 
   lines.push(currentCommand);
+  exportLines.push(currentCommand);
   redoStack.length = 0;
   redraw();
 });
@@ -258,16 +261,49 @@ function redraw() {
 //----------------------------------------------
 (document.getElementById("clearButton") as HTMLButtonElement).onclick = () => {
   lines.length = 0;
+  exportLines.length = 0;
   redoStack.length = 0;
   redraw();
 };
 
 (document.getElementById("undoButton") as HTMLButtonElement).onclick = () => {
   if (lines.length > 0) redoStack.push(lines.pop()!);
+  if (exportLines.length > 0) redoStack.push(exportLines.pop()!);
   redraw();
 };
 
 (document.getElementById("redoButton") as HTMLButtonElement).onclick = () => {
   if (redoStack.length > 0) lines.push(redoStack.pop()!);
+  if (redoStack.length > 0) exportLines.push(redoStack.pop()!);
   redraw();
 };
+
+const exportButton = document.getElementById("exportButton")!;
+document.body.appendChild(exportButton);
+
+exportButton.innerHTML = "Export PNG";
+exportButton.addEventListener("click", () => {
+  document.body.className += " disabled";
+  const tempCanvas: HTMLCanvasElement = document.createElement("canvas");
+  tempCanvas.width = canvas.height * 4;
+  tempCanvas.height = canvas.width * 4;
+  canvas.replaceWith(tempCanvas);
+  const tempCTX: CanvasRenderingContext2D | null = tempCanvas.getContext("2d");
+  if (tempCTX) {
+    tempCTX.scale(4, 4);
+    tempCTX.fillStyle = "white";
+    tempCTX.fillRect(0, 0, tempCanvas.height, tempCanvas.width);
+    tempCTX.lineCap = "round";
+    for (let i: number = 0; i < lines.length; ++i) {
+      lines[i].display(
+        tempCTX,
+      );
+    }
+    const anchor = document.createElement("a");
+    anchor.href = tempCanvas.toDataURL("image/png");
+    anchor.download = "sketchpad.png";
+    anchor.click();
+  }
+  tempCanvas.replaceWith(canvas);
+  document.body.className = "";
+});

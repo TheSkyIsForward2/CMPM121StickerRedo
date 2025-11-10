@@ -29,9 +29,9 @@ type ToolType = "thin" | "thick" | "sticker";
 type StickerData = { label: string; emoji: string };
 
 const stickers: StickerData[] = [
-  { label: "Smile", emoji: "😊" },
-  { label: "Building", emoji: "🏢" },
-  { label: "Plane", emoji: "✈️" },
+  { label: "Woozy", emoji: "🥴" },
+  { label: "Robot", emoji: "🤖" },
+  { label: "Diamond", emoji: "💎" },
 ];
 
 let currentTool: ToolType = "thin";
@@ -98,7 +98,6 @@ function selectTool(tool: ToolType) {
 function selectSticker(emoji: string) {
   currentTool = "sticker";
   currentSticker = emoji;
-
   updateSelectedButton();
 }
 
@@ -125,25 +124,13 @@ interface Command {
 class MarkerLine implements Command {
   points: { x: number; y: number }[] = [];
   thickness: number;
-  markerColor: string;
-  rotation: number;
 
-  constructor(thickness: number, _rotation: number, _color: string) {
+  constructor(thickness: number) {
     this.thickness = thickness;
-    this.rotation = _rotation;
-    this.markerColor = randomColor();
   }
 
   drag(x: number, y: number) {
     this.points.push({ x, y });
-  }
-
-  getColor() {
-    return this.markerColor;
-  }
-
-  getRotation() {
-    return this.rotation;
   }
 
   display(ctx: CanvasRenderingContext2D) {
@@ -164,23 +151,11 @@ class Sticker implements Command {
   x: number;
   y: number;
   emoji: string;
-  emojiRotation: number;
-  throwAwayColor: string;
 
   constructor(x: number, y: number, emoji: string) {
     this.x = x;
     this.y = y;
     this.emoji = emoji;
-    this.emojiRotation = randomRotation();
-    this.throwAwayColor = "black";
-  }
-
-  getRotation() {
-    return this.emojiRotation;
-  }
-
-  getColor() {
-    return this.throwAwayColor;
   }
 
   drag(x: number, y: number) {
@@ -192,23 +167,16 @@ class Sticker implements Command {
   display(ctx: CanvasRenderingContext2D) {
     ctx.font = "24px serif";
     ctx.fillText(this.emoji, this.x - 12, this.y + 12);
-    ctx.rotate(this.emojiRotation);
   }
 }
 
 class ToolPreview implements Command {
   x: number;
   y: number;
-  emojiRotation: number;
-  markerColor: string;
-
-  constructor(x: number, y: number, eR: number, color: string) {
+  constructor(x: number, y: number) {
     this.x = x;
     this.y = y;
-    this.emojiRotation = eR;
-    this.markerColor = color;
   }
-
   display(ctx: CanvasRenderingContext2D) {
     if (currentTool === "sticker" && currentSticker) {
       ctx.font = "24px serif";
@@ -217,22 +185,12 @@ class ToolPreview implements Command {
       ctx.fillText(currentSticker, this.x, this.y);
     } else {
       ctx.beginPath();
-      const radius = currentTool === "thin" ? 2 : 4;
+      const radius = currentTool === "thin" ? 1 : 3;
       ctx.arc(this.x, this.y, radius * 2, 0, Math.PI * 2);
-      ctx.strokeStyle = this.markerColor;
+      ctx.strokeStyle = "gray";
       ctx.stroke();
     }
   }
-}
-
-// Outside-of-class functions
-function randomColor() {
-  const colors = ["red", "blue", "green", "orange", "purple", "pink"];
-  return colors[Math.floor(Math.random() * colors.length)];
-}
-
-function randomRotation() {
-  return (Math.random() * 360 - 180) * (Math.PI / 180); // between -179 degrees and 180 degrees
 }
 
 //----------------------------------------------
@@ -242,7 +200,6 @@ const lines: (MarkerLine | Sticker)[] = [];
 const exportLines: (MarkerLine | Sticker)[] = [];
 const redoStack: (MarkerLine | Sticker)[] = [];
 let currentCommand: MarkerLine | Sticker | null = null;
-let previousCommand: MarkerLine | Sticker | null = null;
 let preview: ToolPreview | null = null;
 
 canvas.addEventListener("mousedown", (e) => {
@@ -255,8 +212,8 @@ canvas.addEventListener("mousedown", (e) => {
   if (currentTool === "sticker" && currentSticker) {
     currentCommand = new Sticker(x, y, currentSticker);
   } else {
-    const thickness = currentTool === "thin" ? 2 : 8;
-    currentCommand = new MarkerLine(thickness, 0, "black");
+    const thickness = currentTool === "thin" ? 1 : 6;
+    currentCommand = new MarkerLine(thickness);
     currentCommand.drag(x, y);
   }
 
@@ -272,20 +229,14 @@ canvas.addEventListener("mousemove", (e) => {
 
   if (currentCommand && currentTool !== "sticker") {
     currentCommand.drag(x, y);
-  } else if (!currentCommand && previousCommand) {
+  } else if (!currentCommand) {
     // Only show preview when not drawing
-    preview = new ToolPreview(
-      x,
-      y,
-      previousCommand.getRotation(),
-      previousCommand.getColor(),
-    );
+    preview = new ToolPreview(x, y);
   }
   redraw();
 });
 
 canvas.addEventListener("mouseup", () => {
-  previousCommand = currentCommand;
   currentCommand = null;
   redraw();
 });

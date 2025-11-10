@@ -98,6 +98,7 @@ function selectTool(tool: ToolType) {
 function selectSticker(emoji: string) {
   currentTool = "sticker";
   currentSticker = emoji;
+
   updateSelectedButton();
 }
 
@@ -124,13 +125,25 @@ interface Command {
 class MarkerLine implements Command {
   points: { x: number; y: number }[] = [];
   thickness: number;
+  markerColor: string;
+  rotation: number;
 
-  constructor(thickness: number) {
+  constructor(thickness: number, _rotation: number, _color: string) {
     this.thickness = thickness;
+    this.rotation = _rotation;
+    this.markerColor = randomColor();
   }
 
   drag(x: number, y: number) {
     this.points.push({ x, y });
+  }
+
+  getColor() {
+    return this.markerColor;
+  }
+
+  getRotation() {
+    return this.rotation;
   }
 
   display(ctx: CanvasRenderingContext2D) {
@@ -151,11 +164,23 @@ class Sticker implements Command {
   x: number;
   y: number;
   emoji: string;
+  emojiRotation: number;
+  throwAwayColor: string;
 
   constructor(x: number, y: number, emoji: string) {
     this.x = x;
     this.y = y;
     this.emoji = emoji;
+    this.emojiRotation = randomRotation();
+    this.throwAwayColor = "black";
+  }
+
+  getRotation() {
+    return this.emojiRotation;
+  }
+
+  getColor() {
+    return this.throwAwayColor;
   }
 
   drag(x: number, y: number) {
@@ -167,16 +192,23 @@ class Sticker implements Command {
   display(ctx: CanvasRenderingContext2D) {
     ctx.font = "24px serif";
     ctx.fillText(this.emoji, this.x - 12, this.y + 12);
+    ctx.rotate(this.emojiRotation);
   }
 }
 
 class ToolPreview implements Command {
   x: number;
   y: number;
-  constructor(x: number, y: number) {
+  emojiRotation: number;
+  markerColor: string;
+
+  constructor(x: number, y: number, eR: number, color: string) {
     this.x = x;
     this.y = y;
+    this.emojiRotation = eR;
+    this.markerColor = color;
   }
+
   display(ctx: CanvasRenderingContext2D) {
     if (currentTool === "sticker" && currentSticker) {
       ctx.font = "24px serif";
@@ -187,10 +219,20 @@ class ToolPreview implements Command {
       ctx.beginPath();
       const radius = currentTool === "thin" ? 2 : 4;
       ctx.arc(this.x, this.y, radius * 2, 0, Math.PI * 2);
-      ctx.strokeStyle = "gray";
+      ctx.strokeStyle = this.markerColor;
       ctx.stroke();
     }
   }
+}
+
+// Outside-of-class functions
+function randomColor() {
+  const colors = ["red", "blue", "green", "orange", "purple", "pink"];
+  return colors[Math.floor(Math.random() * colors.length)];
+}
+
+function randomRotation() {
+  return (Math.random() * 360 - 180) * (Math.PI / 180); // between -179 degrees and 180 degrees
 }
 
 //----------------------------------------------
@@ -200,6 +242,7 @@ const lines: (MarkerLine | Sticker)[] = [];
 const exportLines: (MarkerLine | Sticker)[] = [];
 const redoStack: (MarkerLine | Sticker)[] = [];
 let currentCommand: MarkerLine | Sticker | null = null;
+let previousCommand: MarkerLine | Sticker | null = null;
 let preview: ToolPreview | null = null;
 
 canvas.addEventListener("mousedown", (e) => {
@@ -213,7 +256,7 @@ canvas.addEventListener("mousedown", (e) => {
     currentCommand = new Sticker(x, y, currentSticker);
   } else {
     const thickness = currentTool === "thin" ? 2 : 8;
-    currentCommand = new MarkerLine(thickness);
+    currentCommand = new MarkerLine(thickness, 0, "black");
     currentCommand.drag(x, y);
   }
 
@@ -229,14 +272,20 @@ canvas.addEventListener("mousemove", (e) => {
 
   if (currentCommand && currentTool !== "sticker") {
     currentCommand.drag(x, y);
-  } else if (!currentCommand) {
+  } else if (!currentCommand && previousCommand) {
     // Only show preview when not drawing
-    preview = new ToolPreview(x, y);
+    preview = new ToolPreview(
+      x,
+      y,
+      previousCommand.getRotation(),
+      previousCommand.getColor(),
+    );
   }
   redraw();
 });
 
 canvas.addEventListener("mouseup", () => {
+  previousCommand = currentCommand;
   currentCommand = null;
   redraw();
 });
